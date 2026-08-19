@@ -1,0 +1,97 @@
+-- Databricks notebook source
+-- MAGIC %python
+-- MAGIC from pyspark.sql.functions import count, avg, min, max
+-- MAGIC
+-- MAGIC # --------------------------------
+-- MAGIC # GOLD LAYER
+-- MAGIC # --------------------------------
+-- MAGIC
+-- MAGIC # Silver Delta path
+-- MAGIC silver_path = "/Volumes/etlpipelineincome/default/bronze/silver/clean_income"
+-- MAGIC
+-- MAGIC # Gold output paths
+-- MAGIC gold_customer_path = "/Volumes/etlpipelineincome/default/bronze/gold/customer_segmentation"
+-- MAGIC
+-- MAGIC gold_summary_path = "/Volumes/etlpipelineincome/default/bronze/gold/cluster_summary"
+-- MAGIC
+-- MAGIC
+-- MAGIC # --------------------------------
+-- MAGIC # 1. READ SILVER
+-- MAGIC # --------------------------------
+-- MAGIC
+-- MAGIC df_gold = spark.read \
+-- MAGIC     .format("delta") \
+-- MAGIC     .load(silver_path)
+-- MAGIC
+-- MAGIC
+-- MAGIC # --------------------------------
+-- MAGIC # 2. CREATE BUSINESS-READY TABLE
+-- MAGIC # --------------------------------
+-- MAGIC
+-- MAGIC gold_customer = df_gold.select(
+-- MAGIC     "CustomerID",
+-- MAGIC     "Income",
+-- MAGIC     "SpendingScore",
+-- MAGIC     "KMeans_Cluster"
+-- MAGIC )
+-- MAGIC
+-- MAGIC gold_customer.show(20)
+-- MAGIC
+-- MAGIC
+-- MAGIC # --------------------------------
+-- MAGIC # 3. CLUSTER SUMMARY
+-- MAGIC # --------------------------------
+-- MAGIC
+-- MAGIC cluster_summary = gold_customer.groupBy(
+-- MAGIC     "KMeans_Cluster"
+-- MAGIC ).agg(
+-- MAGIC     count("*").alias("Customer_Count"),
+-- MAGIC     avg("Income").alias("Average_Income"),
+-- MAGIC     avg("SpendingScore").alias("Average_SpendingScore"),
+-- MAGIC     min("Income").alias("Minimum_Income"),
+-- MAGIC     max("Income").alias("Maximum_Income")
+-- MAGIC ).orderBy(
+-- MAGIC     "KMeans_Cluster"
+-- MAGIC )
+-- MAGIC
+-- MAGIC
+-- MAGIC # --------------------------------
+-- MAGIC # 4. SHOW GOLD SUMMARY
+-- MAGIC # --------------------------------
+-- MAGIC
+-- MAGIC cluster_summary.show()
+-- MAGIC
+-- MAGIC
+-- MAGIC # --------------------------------
+-- MAGIC # 5. SAVE CUSTOMER GOLD TABLE
+-- MAGIC # --------------------------------
+-- MAGIC
+-- MAGIC gold_customer.write \
+-- MAGIC     .format("delta") \
+-- MAGIC     .mode("overwrite") \
+-- MAGIC     .save(gold_customer_path)
+-- MAGIC
+-- MAGIC
+-- MAGIC # --------------------------------
+-- MAGIC # 6. SAVE CLUSTER SUMMARY
+-- MAGIC # --------------------------------
+-- MAGIC
+-- MAGIC cluster_summary.write \
+-- MAGIC     .format("delta") \
+-- MAGIC     .mode("overwrite") \
+-- MAGIC     .save(gold_summary_path)
+-- MAGIC
+-- MAGIC
+-- MAGIC print("Gold layer created successfully")
+
+-- COMMAND ----------
+
+-- MAGIC %python
+-- MAGIC summary_csv_path = "/Volumes/etlpipelineincome/default/bronze/gold/cluster_summary_csv"
+-- MAGIC
+-- MAGIC cluster_summary.write \
+-- MAGIC     .mode("overwrite") \
+-- MAGIC     .option("header", True) \
+-- MAGIC     .csv(summary_csv_path)
+-- MAGIC
+-- MAGIC print("Cluster summary saved as CSV successfully")
